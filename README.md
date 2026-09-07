@@ -91,11 +91,10 @@ All three Live API upgrades degrade gracefully: if the preview API ever rejects 
 
 ```bash
 git clone  https://github.com/Sacheetkumar124/MARK-LI-BY-SACHEET.git
-cd MARK-LI-BY-SACHEET
-pip install -r requirements.txt
+cd MARK-LI-BY-SACHEET/MARK-LI-BY-SACHEET
+pip install -r requirements.txt --break-system-packages
 python main.py
 ```
-
 > ⚠️ **Installation Note:** Some OS-specific dependencies are not bundled in `requirements.txt` to keep the repo lightweight. If you hit a `ModuleNotFoundError`, install the missing package with `pip install <module_name>`.
 
 ---
