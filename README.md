@@ -290,7 +290,3 @@ An independent assistant built on top of the original Mark-LIII engine by FatihM
 |---|---|
 | Instagram | [@jamie](https://www.instagram.com/cutiefemboynya) |
 | Discord | `alone_slave` |
-
----
-
-*This project is released under the license included in `LICENSE`.*
