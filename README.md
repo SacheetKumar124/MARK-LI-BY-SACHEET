@@ -1,174 +1,217 @@
-# ⚙️ MARK LIII (53)
-### The Ultimate Personal AI Assistant — Made by Sacheet
+# ⚙️ MARK LIV (54)
+### The Personal AI Assistant That Learns, Watches, and Keeps Its Hands Honest — by Sacheet
 
-A real-time voice AI that can hear, see, understand, and control your computer. Built on the Gemini Live API for native audio streaming — zero subscriptions and total digital autonomy.
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue) ![Platform](https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux%20(Kali%20Wayland)-success) ![Tests](https://img.shields.io/badge/Self--test%20suite-43%2F43%20passing-brightgreen) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey)
+
+A real-time voice AI that can hear, see, understand, and control your computer. Built on the Gemini Live API for native audio streaming — zero subscriptions, total digital autonomy.
 
 ---
 
 ## ✨ Overview
 
-MARK LIII is the version where the assistant stopped waiting to be asked.
+**MARK LIV is the release where JARVIS stops being a tool you operate and becomes a system you trust.**
 
-The earlier Marks gave JARVIS a voice, a memory, and a set of tools it used when you spoke. This one adds the two things that turn a tool into an assistant: **judgement** about when it is worth speaking, and **senses** so it has something to have judgement about. It reads your screen, notices when a build breaks, knows whether you are at the desk, hears your voice, drives real keyboard and mouse input, and protects your identity and devices — while staying quiet unless something genuinely earns your attention.
+The earlier Marks gave the assistant a voice, senses, judgement, and hands. This Mark gives it four things nobody had built yet:
 
-It is also the version that became honest. Every boundary is enforced in code rather than requested in a prompt, every autonomous action is written to an audit trail with a reason, and when something cannot work it says so in one clear sentence instead of a stack trace.
+1. **A memory that grows by itself** — it learns facts from your conversations, remembers being *wrong*, and asks you to confirm what it overheard before it keeps it.
+2. **Standing orders** — *"when a new port opens, tell me"*, *"when the CPU stays above 85%, find what is using it"*, *"every day at 8:30, brief me"* — watch rules that run forever without a model call.
+3. **Deferred work** — *"in twenty minutes, check whether the download stopped"*, *"at 15:30, run the tests"* — real tasks, queued on disk, that survive a restart and report back.
+4. **Honest hands** — typing is a *permission*, not a decision. Every keystroke passes a guard that refuses to type into a window nobody verified. A message is never a web search. A screenshot is never taken twice by accident.
+
+And the release became **provably** stable: a committed regression suite (`tools/selftest.py`) runs 43 checks — compile, discovery, wiring invariants, keystroke safety, the WhatsApp flow — in one command, so a fix can never silently un-fix something else.
 
 It's not just an assistant — it's an extension of your digital life.
 
 ---
 
+## 🆕 What's New Since Mark LIII
+
+### 🧠 A memory that learns by itself — and remembers being wrong
+
+`core/learned.py` + the `memory_learn` tool. Three habits, all by voice:
+
+| You say | What happens |
+|---|---|
+| *"No — I message Rayan Ali, not Rayan"* | Stored as a **standing correction**, rendered **first and in full** in the system prompt, ahead of identity and every other note. It changes the next answer, not just this one. |
+| *"what have you picked up?"* | Facts mined from your sessions are read back, one line each. **approve** / **reject** by voice — a rejected fact is never proposed again. |
+| *"when did I last message Rayan?"* | Answered from the audit trail and past sessions (`recall_history`) instead of a confident guess. |
+
+Session mining is **local and deterministic** — regexes over your own words, no second model call. An explicit *"remember that…"* is stored at once; everything else waits for your confirmation, because a memory that fills with facts you never said is worse than a short one.
+
+### 📡 Watch rules — "when X, do Y"
+
+`core/rules.py` + the `rules` tool. Triggers the machine can actually measure:
+
+| Trigger | Measures | Fields |
+|---|---|---|
+| `port` | a **newly listening** port (edge-triggered — one that stays open stays silent) | `port`, `process` |
+| `cpu` / `ram` | load, in either direction | `above` / `below`, `for_ticks` |
+| `disk` | free space | `free_below` |
+| `battery` | charge | `below` |
+| `time` | the clock | `at` `HH:MM`, `days` |
+
+Actions: **notify** (say something — `{port}`, `{process}`, `{value}`, `{free}`, `{battery}` are filled in) or **task** (do real work through the same registry as a spoken command). Every rule carries a cooldown (default 10 min) and an hourly cap, because a rule that speaks every tick is a rule you switch off. A fired rule arrives as `[WATCH]` and is spoken in one sentence — it is **not** subject to the attention budget, because you already decided it was worth interrupting for. `rules action='test'` dry-runs a rule with no side effect.
+
+### 🗂️ Queued work — "do this later"
+
+`core/jobs.py` + the `task_queue` tool. A reminder *says* something at a time; a queued job **does** something:
+
+- **Durable** — `memory/jobs.json`. A job queued before a restart still runs; one that came due while the app was closed runs on the next tick, *saying how late it is*.
+- **Bounded retries** — two retries, then parked as failed with the reason, and the failure is spoken. An infinite retry on a task that cannot succeed is worse than a visible failure.
+- **Serialised** — background work runs one at a time, so a scan and a chat automation never fight over the desktop.
+- **Same tools as you** — jobs run through `pc_automation`: the same registry, verification, audit trail and `undo` as anything asked for out loud.
+
+*"`when the CPU drops below 50`"* works too — conditions are parsed from your words.
+
+### 🖐️ The keystroke guard — typing is a permission
+
+`core/input_guard.py`. Real sessions caught JARVIS typing into a window nobody asked him to touch — and on Wayland an application is **forbidden** from asking which window has focus, so no amount of checking could have prevented it in the old design. The fix is structural:
+
+- **Typing, pasting and Enter require a live permit** — issued only by code that has just read a screenshot and confirmed the text field, expiring in 30 s, impossible to mint from the conversation.
+- **Terminals are refused outright** — including JARVIS's own console.
+- **Combinations that lose the window are refused** — `alt+F4`, `alt+tab`, `super`, `ctrl+alt+t`. Ask for the window by name instead of navigating blind.
+- **Harmless keys pass** — copy, escape, arrows. The user never feels the guard.
+- **A refusal is final and says what to do**: *"I will not type into a window I have not verified. Use pc_automation — it looks first."*
+
+### 👁️ One look per request — the screenshot storm, ended
+
+`core/vision_budget.py`. Three independent tools could look at the screen, and nothing said how many times *one request* may look — so "take a screenshot" became eight captures. Now a shared gate allows **one look per request**, enforced in code across `screen_process`, `screen_ai` and `pc_automation`. Speaking again is a new request, so a genuine *"look again"* costs nothing.
+
+The background screen watch was tamed in the same pass:
+
+| Rule | Effect |
+|---|---|
+| No auto-resume after restart | A watch armed weeks ago can never come back on its own |
+| Arming needs your spoken confirmation | Both modes — a tool call alone cannot start it |
+| 30 s floor between looks, 24/hour ceiling | The watch **stops itself** and says so at the cap |
+| Skips while you are talking (20 s) | A background loop never outbids the person in the room |
+| 1.25 s frame reuse in the capture path | Three tools checking at once produce **one** photograph |
+
+### 💬 WhatsApp: one look, type, Enter — verified
+
+`WHATSAPP.md` holds the full playbook. The short version:
+
+- **Chat already open** → look once (which chat is open *and* is the caret in the box), type, Enter, one look to prove the send. No menus, no chat list, no re-searching.
+- **Chat not open** → WhatsApp's own search shortcut (`Ctrl+Alt+/` — not Firefox's `Ctrl+K`, a real bug caught and fixed), open, **verify which conversation actually opened by name** before typing anything.
+- **Wrong chat opened** → nothing typed, nothing sent, honest refusal.
+- **Messaging intent wins routing** — *"send Rayan a message"* can never fall through to a web search or an app launch. Those skills refuse the request instead of opening a website for it.
+
+### 🔇 It is never silently deaf again
+
+A health watch says the thing out loud — *"I heard you but produced no reply"* — and rotates the session on the second stall, because a Live session that stops producing turns does not restart on its own. Proactive audio is **off by default**: an assistant that occasionally answers the room is a far better failure than one that ignores you with no error and no log line.
+
+### 🩺 Screenshots that cannot lie
+
+On Wayland, the old capture path grabbed the empty XWayland root and fed the model a **solid black frame**. The capture chain now walks portal → GNOME Shell D-Bus → grim, with mss as an X11-only last resort, and **every frame is measured** — a uniform frame (std < 2.0) is rejected instead of trusted. All rungs proven live on this machine: a real 1080p desktop, not 15 KB of black.
+
+### ✅ `tools/selftest.py` — the suite that keeps it honest
+
+```
+python3 tools/selftest.py
+```
+
+**43 checks**: every file compiles · capability discovery (26 actions + 8 inline tools, 2 plugins) · wiring invariants from real past bugs (the bare `loop` that broke every tool call, the Wayland capture order, background work with no runner) · keystroke safety with the input layer replaced by recorders (blind typing refused, **0 keystrokes sent**) · the WhatsApp flow producing exactly `type → Enter` with the send verified · each module's own self-test. Exit code 0 only when everything passes — usable as a pre-run gate.
+
+---
+
+## 🧑‍🎤 The Face
+
+The centre of the HUD is an animated human head — **real measured facial geometry** (MediaPipe's canonical model), with the skull, neck and rigs generated at startup and drawn entirely in software:
+
+- **no new dependencies** — runs on the PyQt6 and numpy the app already needed;
+- **no GPU, no shaders, no driver** — a VM, a remote session and a 2013 laptop render identically;
+- **one 25 KB asset**; everything else is a formula.
+
+**Lip-sync you can actually read**: ~50 mouth shapes a second from the audio's formants *and* the transcript — lips close on *m/b/p*, spread on *i/e*, round on *u/o*. One rule set covers Latin, Cyrillic and Greek via Unicode decomposition; scripts that hide pronunciation fall back to the audio-only shape — less detail, never wrong. It breathes, blinks, makes saccades, and looks away while thinking, meets your eyes while listening, sleeps when asleep. ⚙ → **HUD** swaps it for a reactor core driven by the real audio level.
+
+---
+
 ## 🚀 Capabilities
 
-### Core Features
+### Core
 | Feature | Description |
 |---|---|
-| 🧩 Plugin System | Drop a single `.py` file into `plugins/` — JARVIS learns a new skill on next launch |
+| 🧠 **Learning Memory** | Corrections that outrank everything, facts proposed for your approval, history recalled from sessions + audit trail |
+| 📡 **Watch Rules** | Standing "when X, do Y" on ports, CPU, RAM, disk, battery, scan age and the clock |
+| 🗂️ **Queued Work** | Durable deferred tasks — at / after / when — that survive restarts and report back |
+| 🖐️ **Keystroke Guard** | Permit-based typing; terminals and window-losing combos refused in code |
+| 👁️ **One-Look Budget** | One screenshot per request across all three vision tools; the watch capped and confirmed |
+| 💬 **Verified Messaging** | WhatsApp Web: one look → type → Enter → proof on screen; wrong chat = nothing sent |
+| 🧑‍🎤 Holographic Avatar | Software-rendered human head with real lip-sync — zero GPU, zero new dependencies |
+| 🔇 Self-Echo Guard | Never answers its own last sentence — the tail of its own voice is recognised and dropped |
+| 🪪 Runtime Self-Knowledge | Name, OS, abilities **and limits** generated from the live system each session |
+| 🧩 Plugin System | Drop a single `.py` into `plugins/` — a new skill on next launch, crash-isolated |
 | 🎙️ Real-time Voice | Ultra-low latency conversation in any language via Gemini Live API |
-| 💓 Affective Dialog | Hears the emotion in your voice and adapts its tone in response |
-| 🤫 Proactive Audio | Knows when you're not talking to it — background chatter never triggers a reply |
-| ♾️ Unlimited Sessions | Context compression plus resumption — one conversation lasts for hours |
-| 🧠 Persistent Memory | Remembers projects, preferences and personal context across sessions |
-| 🖥️ System Control | Launch apps, adjust volume/brightness, WiFi, shortcuts, power — all by voice |
-| 👁️ Visual Awareness | Screen capture and webcam vision piped into your main Gemini session |
-| 🌅 Morning Briefing | On first boot: greets you, reads the time, recaps yesterday, fetches live news |
-| 🔔 Proactive Check-ins | Time-aware, context-aware check-ins that know your projects and the hour |
-| 🗓️ Session Memory | Summarises each conversation and mentions it next morning — then forgets it |
-| 📊 Hardware Monitoring | CPU, RAM, GPU and temperature telemetry with spoken alerts |
-| 🌤️ Weather Report | Live weather for your city, personalised from memory |
-| 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` / `search` — grounded first, DDG fallback |
+| 💓 Affective Dialog | Hears the emotion in your voice and adapts its tone |
+| ♾️ Unlimited Sessions | Sliding-window compression + resumption handles — a drop no longer wipes the conversation |
+| 🧠 Persistent Memory | No size limit, nothing silently forgotten; the prompt carries a budgeted core, the rest is one lookup away |
+| 👁️ Memory Panel | Every stored fact, when it was learned, one-click forget |
+| ↩️ Undo | Reverses its own file and setting actions — "undo" in any language |
+| ⚠️ Real Confirmation | Shutdown, restart, WiFi wait for a **button you press** — the model cannot confirm irreversible actions |
+| 🧠 Judgement | Urgency × relevance × novelty × confidence against an interruption budget with quiet hours; the rest queues into a digest |
+| 👀 Senses | Ports, machine health, presence — emits on change, not on a timer |
+| 📱 Phone as a Second Node | Voice from your phone mutes the laptop mic; handoffs and an outbox carry work between the two |
+| 🛡️ Personal Protection | Identity breach watch, device sweeps, lock + SOS — all opt-in, all code-gated |
+| 🌅 Morning Briefing | Greets you, reads the time, recaps yesterday, fetches live news |
+| 🔍 Multi-Mode Web Search | `news` / `research` / `price` / `compare` — grounded first, DDG fallback |
 | ⏰ Smart Reminders | OS-native scheduled notifications (systemd / LaunchAgent / Task Scheduler) |
-| ✈️ Flight Finder | Live flight price and availability lookup |
-| 🎮 Game Updater | Checks and triggers Steam and Epic updates on demand |
-| 📂 File Processor | Read, summarise and answer questions about local files |
-| 💻 Code Helper | Inline code review, debugging and generation |
-| 🌐 Browser Control | Open URLs, navigate tabs, interact with the browser by voice |
-| 📨 Send Message | Compose and send through WhatsApp, Telegram, Signal, Instagram and Discord |
-| 🎬 YouTube Control | Search, play and control playback by voice |
-| 🖱️ Desktop Control | Taskbar, window management and desktop-level operations |
-| 📱 Remote Dashboard | Control the assistant from your phone via QR pairing |
-| ⚡ Auto-Start on Boot | Registers with the OS startup system |
-| 📋 Clipboard Intelligence | Copy any text → floating panel with Translate / Summarise / Explain / Fix |
-| 🎨 Assistant Customisation | Change the assistant name, your name and the UI colour from the app |
+| 🎮 Game Updater | Steam and Epic update checks on demand |
+| 📋 Clipboard Intelligence | Copy any text → Translate / Summarise / Explain / Fix |
+| 🎨 Live Theming | Recolour the entire HUD from a hue wheel or hex — the avatar retints with it |
+| 🎚️ Push-to-Talk | Mic stays closed until you hold **Ctrl+Space** |
+| 🩺 Self-Diagnosis | `python3 tools/doctor.py` — distro, session type, per-capability backend, live readings |
+| ✅ Regression Suite | `python3 tools/selftest.py` — 43 checks proving the machinery still works |
 
----
+### Kali & Wayland native
+Written against a real Kali GNOME Wayland session, not a developer's X11 machine. Every capability walks a verified backend cascade, so nothing silently does nothing:
 
-## 🆕 What's New in Mark LIII
-
-### 🧠 Judgement — JARVIS Earns the Right to Interrupt
-More automatic usually means more annoying, and this is the layer that prevents it. Every observation is scored on **urgency, relevance, novelty and confidence**, then allowed to interrupt only if it clears the floor *and* the budget — a small number per hour, a larger number per day, a minimum gap between interruptions, and quiet hours overnight. Everything else queues silently into a digest you read when you choose.
-
-Two real flaws were found and fixed by the layer's own self-test: urgent items were bypassing the repeat-check (the same alert every 45 seconds), and novelty alone was enough to earn a slot (junk mail). Silence is a valid answer, and the budget is what makes it one.
-
-### 👁️ Senses — It Notices Instead of Waiting
-A background loop watches what actually changes: listening TCP ports read straight from `/proc`, machine health, whether you are at the desk (via the desktop session's idle monitor), and how stale your last security sweep is. It emits on **change**, not on a timer — the first run stores a baseline instead of alarming about the ports that were always open.
-
-The loop runs on your machine, in your language, and hands its findings to JARVIS itself to phrase. When something clears the attention budget you get one spoken sentence in his voice; when nothing does, you get nothing at all.
-
-### 🖐️ Hands — It Can Read and Drive Your Screen
-**Screen AI** turns the screen into a working surface:
-
-- **Reads** whatever is open and tells you what you are actually doing
-- **Understands messages** in WhatsApp, Telegram, Signal, Discord and Instagram — who wrote, what they said, and whether it is waiting on a reply
-- **Drafts replies in your voice**, learned from real conversations rather than a description of your style
-- **Sends them**, after checking the text is genuinely in the box
-- **Finds text on screen and clicks or types into it**
-- **Reads and fixes errors** — tracebacks, compiler, npm, pip, apt and service failures — by explaining the cause and running the safe inspections that narrow it down
-
-Unattended replies are hard-gated in code, not by prompt wording: only contacts you have switched on, never the same incoming message twice across restarts, hourly caps per contact and globally, a cooldown, quiet hours, risky drafts held for your approval, and password managers and banking windows never analysed at all.
-
-### 📱 The Phone Is a Second Node, Not a Remote
-The dashboard already listens on your network, so your phone becomes a full participant rather than a viewer. Talk to JARVIS from the phone and the laptop microphone mutes; send a task from the laptop and read the result on the phone. A shared session store carries handoffs and an outbox between the two, so a job started at the desk finishes in your pocket.
-
-### 🛡️ Personal Protection
-Three bundles, all off until you configure them:
-
-- **Identity** — watches your *own* email addresses and handles for new registrations and breach exposure. Any request about someone who is not in your configured list is refused **in code**, however it is phrased.
-- **Device** — scheduled sweeps with change alerts: firewall state, free space, battery, disk encryption, and what is newly listening.
-- **Personal safety** — a lock action and an SOS that sends a message with your location, both confirmation-gated.
-
-### 🔒 Security Toolkit (HexStrike Plugin)
-JARVIS gets a real offensive and defensive toolkit: a **107-entry local fast lane** for tools that are already installed, plus a large remote catalogue reached through the HexStrike MCP server on port 9999. It is built around **not lying to you**: every finding is independently verified before it is reported as real, verified and refuted results are tracked separately, and a scan target must be listed in `config/hexstrike_scope.json` or it is refused before a command is even built.
-
-A local fast lane matters more than the raw tool count — on this machine **96 of the 107 allowlisted tools resolve locally**, so the common case never pays for a round trip.
-
-### 🐧 Kali and Wayland Native
-Written against a real Kali GNOME Wayland session, not a developer's X11 machine. A compatibility layer walks a verified backend cascade for each capability, so nothing silently does nothing:
-
-| Feature | Backend it actually uses on Kali |
+| Capability | Backend it actually uses on Kali |
 |---|---|
-| Volume / mute | `wpctl` (PipeWire) → `pactl` → `pamixer` |
-| Brightness | logind `SetBrightness` over polkit — no root, no extra package |
-| Screenshots | xdg-desktop-portal → GNOME Shell D-Bus → `grim` → `scrot`/`import` |
-| Clipboard | `wl-copy`/`wl-paste` → `xclip` → pyperclip |
-| Notifications | notification daemon D-Bus (works even when `notify-send` is broken) |
-| Typing / clicking | `ydotool` with `ydotoold` — real kernel-level input events |
+| Screenshots | xdg-desktop-portal → GNOME Shell D-Bus → grim → mss (X11 only) — **every frame measured, never black** |
+| Typing / clicking | ydotool + ydotoold (systemd user unit included) — behind the keystroke guard |
+| Volume / mute | wpctl (PipeWire) → pactl → pamixer |
+| Brightness | logind SetBrightness over polkit — no root, no extra package |
+| Clipboard | wl-copy/wl-paste → xclip → pyperclip |
+| Notifications | notification-daemon D-Bus (works even when notify-send is broken) |
 | Window actions | GNOME keybindings for maximise and snap |
-
-A systemd user unit ships in `config/systemd/` so the input daemon survives reboots instead of silently dying with the session.
-
-### 🔊 Audio That Cannot Fail, and Cannot Crash
-Two audio problems were eliminated at the root rather than retried around:
-
-- **No more ALSA sample-rate errors.** PortAudio was being handed raw hardware PCMs whose clock is fixed at 44100 Hz and which cannot convert to the 16000/24000 Hz the model needs. Raw hardware devices are never auto-selected now; the app uses the sound-server devices that resample freely, and falls back to opening at a supported rate and converting in software. PortAudio's C-level complaints — which no `try`/`except` can catch — are suppressed around probe attempts, which is why listing audio devices no longer prints a wall of `pa_linux_alsa.c` internals.
-- **No more segfaults on teardown.** Audio output is callback-driven, so a cancelled task can no longer interrupt a blocking device write. The old path could be cancelled mid-transaction when a session ended, leaving PortAudio operating on a stream being torn down underneath it — a crash inside C, uncatchable from Python, and fatal. Closing is now idempotent and tolerates a device that has already vanished.
-
-### 🩺 It Can Tell You What Is Wrong With Itself
-`python3 tools/doctor.py` reports the distro, session type, whether Python is externally managed, which backend each capability resolves to, live volume and brightness readings, the input-daemon socket, your security fast lane, and which optional tools are missing. `--json` for scripts, `--deep` for a real end-to-end capture test.
-
-The same philosophy runs at startup: the microphone and speaker are opened and closed **before** the session needs them, so a device that cannot work is one clear line at launch instead of a failure mid-sentence.
-
-### ⚙️ Reliability Details You Will Only Notice When They Are Missing
-- **Session rotation is expected, not an error.** A Live session has a maximum duration; when the server rotates it, JARVIS reconnects on the resumption handle and keeps the conversation instead of printing a traceback.
-- **Actions accept the names the model actually uses.** Forty-odd aliases (`key`, `enter`, `submit`, `doubleclick`, `write`, `focus`, …) because an unrecognised spelling used to cost a failed action and a retry loop.
-- **Content cannot be sent twice by accident.** Identical text typed or pasted is allowed twice, then refused with an explicit message telling the model the action is complete — the fix for a real session that pasted one sentence into a chat five times. Keypresses and clicks are deliberately exempt, because pressing Enter twice is a normal thing to ask for.
-- **A crashed plugin never takes JARVIS with it.** A broken plugin shows as `BROKEN` in the manager with its error, while everything else keeps working.
-
----
-
-## 🧩 The Plugin System
-
-Every new capability ships as a single `.py` file. Drop it into `plugins/`, restart, and the skill is live by voice in any language.
-
-1. Copy `plugins/_template.py`
-2. Fill in the `PLUGIN` dict and the `run()` function
-3. Drop it into `plugins/` — done
-
-Each plugin declares its own tool schema and logic in one file. The engine discovers it at startup, registers it with the Live session, and lists it in the **Plugin Manager** panel where every plugin gets its own persistent ON/OFF toggle. Discovery is crash-isolated and name collisions with core tools are rejected automatically.
-
-Two plugins ship as worked examples: `screen_ai` (eyes and hands) and `hexstrike_mcp` (security toolkit).
 
 ---
 
 ## 🔐 Safety Model
 
-The rules that matter are enforced in code, not requested in a prompt:
+The rules that matter are enforced in **code**, not requested in a prompt:
 
 | Boundary | How it is enforced |
 |---|---|
-| Scanning a target | Must be listed in `config/hexstrike_scope.json`; refused before a command is built |
-| Messaging as you | Only contacts with `auto_reply: true`; never the same message twice; hourly caps |
-| Looking up a person | Only identifiers in your own `config/personal_watch.json`; others refused in code |
-| Destructive actions | Confirmation-gated, dry-run available, every one written to the audit trail |
-| Cameras and screen capture | Opt-in per sensor, with a visible indicator |
-| Shell access | An argument-list allowlist with no shell interpolation — never blanket `bash -c` |
+| Typing anywhere at all | `core/input_guard.py` — a permit from a verified frame; terminals and forbidden combos refused outright |
+| Sending a message | Verified send: the text must appear in the box; the send must appear as a bubble; wrong chat = nothing typed |
+| Messaging → navigation | A messaging request can never route to a web search or an app launch — those skills refuse it |
+| Taking a screenshot | One look per request; the background watch needs confirmation, pauses while you talk, and stops at its hourly ceiling |
+| Auto-replying as you | Only contacts with `auto_reply: true`; never the same message twice; hourly caps; risky drafts held for approval |
+| Looking up a person | Only identifiers in `config/personal_watch.json`; anything else refused in code |
+| Destructive actions | Confirmation-gated, undoable where possible, every one written to the audit trail |
+| Shell access | Argument-list allowlist, no shell interpolation — never blanket `bash -c` |
 
-Every autonomous action is appended to `memory/activity_log.jsonl` with a `why`, so "why did it do that?" always has an answer.
+Every autonomous action is appended to `memory/activity_log.jsonl` with a **why**, so *"why did it do that?"* always has an answer.
 
 ---
 
 ## ⚡ Quick Start
 
 ```bash
-cd Mark-LIII
+git clone https://github.com/SacheetKumar124/MARK-LIII-BY-SACHEET.git
+cd MARK-LIII-BY-SACHEET/Mark-LIV
 pip install -r requirements.txt --break-system-packages
 python main.py
 ```
 
-Put your Gemini API key in `config/api_keys.json`, then run. On first launch, `setup.py` walks you through the key, your name, and the assistant name.
+Put your Gemini API key in `config/api_keys.json`, then run. First launch walks you through the key, your name, and the assistant name.
 
-> ⚠️ **Kali / Debian / Ubuntu note:** system Python carries an `EXTERNALLY-MANAGED` marker (PEP 668), so `pip install` is refused outright. Use a virtualenv, or add `--user --break-system-packages` as shown above. `setup.py` and the in-app installer detect the marker and add those flags for you.
-
-> 💡 **Check your machine first:** `python3 tools/doctor.py` tells you which backends resolve and what is missing, before you debug anything.
+> **Kali / Debian / Ubuntu:** system Python is externally managed (PEP 668), so plain `pip install` is refused. Use a virtualenv, or add `--user --break-system-packages` as shown. `setup.py` detects the marker and adds the flags for you.
+>
+> **Check your machine first:** `python3 tools/doctor.py` tells you which backends resolve and what is missing — before you debug anything.
+>
+> **After any change:** `python3 tools/selftest.py` — 43 checks, exit code 0 only when everything passes.
 
 ---
 
@@ -176,85 +219,72 @@ Put your Gemini API key in `config/api_keys.json`, then run. On first launch, `s
 
 | Requirement | Details |
 |---|---|
-| **OS** | Linux (verified on Kali GNOME Wayland), macOS, Windows |
-| **Python** | 3.11 or newer — developed and verified on 3.14 |
-| **Microphone** | Required for voice interaction |
-| **API Key** | Free Gemini API key, placed in `config/api_keys.json` |
-| **Optional** | `ydotoold` for real keyboard/mouse control on Wayland (unit file included) |
+| OS | Linux (verified on **Kali GNOME Wayland**), macOS, Windows |
+| Python | 3.11 or newer — developed and verified on **3.14** |
+| Microphone | Required for voice interaction |
+| API Key | Free Gemini API key in `config/api_keys.json` |
+| Optional | `ydotoold` for real keyboard/mouse input on Wayland (unit file included) |
 
-Some OS-specific dependencies are deliberately not bundled in `requirements.txt` to keep the repo light. If you hit a `ModuleNotFoundError`, install the named package with `pip install <module>`.
+Some OS-specific dependencies are deliberately not bundled to keep the repo light. On a `ModuleNotFoundError`, install the named package.
 
 ---
 
 ## 🗂️ Project Structure
 
 ```
-Mark LIII/
-├── main.py                      # Core loop — Live session, audio I/O, tool dispatch
-├── ui.py                        # PyQt6 HUD — waveform, log panel, plugin manager, camera
+Mark-LIV/
+├── main.py                      # Live session, audio I/O, tool dispatch, health watch
+├── ui.py                        # PyQt6 HUD — avatar, log panel, plugin manager, camera
 ├── setup.py                     # First-run configuration wizard
 │
 ├── core/                        # The engine
-│   ├── prompt.txt               # Personality, tool routing and the [ATTENTION] protocol
-│   ├── plugin_loader.py         # Plugin discovery, validation, crash isolation
-│   ├── action_loader.py         # Action discovery
+│   ├── prompt.txt               # Personality, routing, [KEYBOARD SAFETY], [LEARNING], [RULES], [JOBS]
+│   ├── learned.py               # Corrections, fact proposals, session mining, history recall
+│   ├── rules.py                 # Watch-rule engine — triggers, rate limits, dry runs
+│   ├── jobs.py                  # Durable deferred-work queue
+│   ├── task_runner.py           # The seam between "do this later" and the real tools
+│   ├── input_guard.py           # Keystroke permits, terminal refusal, forbidden combos
+│   ├── vision_budget.py         # One look per request — the screenshot-storm gate
 │   ├── attention.py             # Judgement — scoring, interruption budget, digest, quiet hours
-│   ├── senses.py                # Ports, machine health, presence, staleness — emits on change
-│   ├── brain.py                 # The loop: observe → score → decide → act/queue → remember
+│   ├── senses.py                # Ports, health, presence, staleness — emits on change
+│   ├── brain.py                 # The loop: observe → score → decide → act → speak
+│   ├── screen_watch.py          # Capture cascade, frame measurement, change detection, redaction
+│   ├── chat_agent.py            # Read threads, draft in your voice, verified sending
+│   ├── error_doctor.py          # Read on-screen errors, diagnose, run safe inspections
+│   ├── vision_client.py         # Vision with a self-ordering model chain
 │   ├── activity_log.py          # Audit trail — every autonomous act with a reason
 │   ├── personal_watch.py        # Identity, device and personal-safety watches
 │   ├── phone_bridge.py          # Session handoff, outbox, phone inbox
 │   ├── audio_stream.py          # Device policy, rate negotiation, crash-proof streams
-│   ├── audio_devices.py         # Device picker
 │   ├── desktop_input.py         # Wayland (ydotool) / X11 input bridge
-│   ├── kali_compat.py           # Session-aware backend cascade for OS features
-│   ├── vision_client.py         # Vision with a self-ordering model chain
-│   ├── screen_watch.py          # Capture, change detection, redaction, retention
-│   ├── chat_agent.py            # Read threads, draft in your voice, verified sending
-│   ├── error_doctor.py          # Read on-screen errors, diagnose, run safe inspections
+│   ├── kali_compat.py           # Session-aware backend cascade
 │   ├── local_exec.py            # Validated command executor with a tool allowlist
-│   ├── confirm.py, undo.py      # Confirmation gate and undo stack
-│   ├── llm_client.py            # Native tool-calling client
-│   ├── installer.py             # Dependency installer (PEP 668 aware)
-│   ├── tts.py, stt.py           # Optional local speech engines
-│   └── wake_word.py             # Optional "Hey Jarvis" wake word
+│   └── installer.py             # Dependency installer (PEP 668 aware)
 │
-├── plugins/                     # Drop-in skills
-│   ├── _template.py             # Copy this to write a new plugin
-│   ├── screen_ai.py             # Eyes and hands — screen, messages, errors
-│   └── hexstrike_mcp.py         # Security toolkit client and orchestrator
+├── plugins/                     # Drop-in skills (crash-isolated)
+│   └── screen_ai.py             # Eyes and hands — screen understanding, chat watch, error fixing
 │
-├── actions/                     # Voice-callable actions (22)
-│   ├── assistant_control.py     # Arm/disarm the brain, attention, senses
-│   ├── personal_watch.py        # Identity, device and safety actions
-│   ├── computer_control.py      # Keyboard, mouse, window management
-│   ├── computer_settings.py     # Volume, brightness, WiFi, power
-│   ├── screen_processor.py      # Screen and webcam vision into the Live session
-│   ├── dev_agent.py             # Multi-step developer tasks
-│   └── …                        # search, files, messaging, media, reminders, and more
+├── actions/                     # Voice-callable actions (26)
+│   ├── pc_automation.py         # The hands — verified WhatsApp, apps, files, media, typing
+│   ├── memory_learn.py          # Corrections, fact review, history
+│   ├── rules_tool.py            # Watch rules by voice
+│   ├── task_queue.py            # Deferred work by voice
+│   ├── computer_control.py      # Raw keyboard/mouse — behind the keystroke guard
+│   ├── screen_processor.py      # Screen + webcam vision into the Live session
+│   └── …                        # search, files, messaging, media, reminders, dev agent, and more
 │
-├── dashboard/                   # Phone control
-│   ├── server.py                # FastAPI + WebSocket, bound to your LAN
-│   ├── assistant_api.py         # 8 endpoints — state, digest, activity, handoff
-│   └── static/jarvis_phone.html # Voice in/out phone page — no Android app needed
-│
+├── dashboard/                   # Phone control — FastAPI + WebSocket, QR pairing
 ├── memory/                      # Persistent state (all local)
-│   ├── memory_manager.py
-│   ├── long_term.json           # Identity, preferences, projects, sessions
-│   ├── live_chat_style.json     # Drafting voice
-│   └── live_chat_examples.json  # Learned reply pairs
+│   ├── long_term.json           # Identity, preferences, projects, corrections, sessions
+│   ├── learned.json             # Fact proposals awaiting your approval
+│   ├── rules.json               # Your watch rules
+│   ├── jobs.json                # Your queued work
+│   └── activity_log.jsonl       # The audit trail
 │
-├── config/
-│   ├── api_keys.json            # Your Gemini key and UI preferences
-│   ├── assistant_policy.json    # Trust rules and sensor switches
-│   ├── screen_ai.json           # Screen AI settings and contact list
-│   ├── personal_watch.json      # The only identifiers Jarvis may look up
-│   ├── hexstrike_scope.json     # The only targets that may be scanned
-│   ├── hexstrike_tools.json     # Tool catalogue, playbooks, false-positive hints
-│   └── systemd/ydotoold.service # Input daemon unit — survives reboots
-│
+├── config/                      # Keys, policy, scope locks, systemd unit
 └── tools/
-    └── doctor.py                # Compatibility and capability report
+    ├── doctor.py                # Compatibility and capability report
+    └── selftest.py              # 43-check regression suite — one command, exit-code gate
 ```
 
 ---
@@ -263,8 +293,10 @@ Mark LIII/
 
 | Document | Covers |
 |---|---|
-| `SCREEN_AI.md` | Screen AI in full — what it reads, how drafting works, every safety gate |
-| `ASSISTANT.md` | The judgement, senses, phone and protection layers, and how to use them |
+| `SELF_LEARNING.md` | The learning memory, watch rules, queued jobs and the keystroke guard — in full |
+| `WHATSAPP.md` | The complete messaging playbook — state detection, search, verification, every failure mode |
+| `SCREEN_AI.md` | Screen AI — what it reads, how drafting works, every safety gate |
+| `ASSISTANT.md` | The judgement, senses, phone and protection layers |
 
 ---
 
@@ -272,21 +304,55 @@ Mark LIII/
 
 | Area | Next |
 |---|---|
-| **Self-healing** | Detect when its own senses or hands stop working (input daemon, portal, audio backend) and bring them back, reporting what it healed |
-| **Verified actions** | Confirm typing, pasting and sending actually landed before telling you it succeeded |
-| **Learned tolerance** | Derive the interruption budget from how you respond to interruptions instead of fixed thresholds |
-| **Screen memory** | Continuous understanding so it can answer "what was I working on an hour ago?" |
-| **Nightly watch** | Run the security sweep on schedule and report only what changed since yesterday |
+| Voice identity | On-device speaker profile — answer only you, ignore the TV and the room |
+| Confirm-before-send | Type the draft, speak it back, wait for your yes before Enter |
+| Screen memory | Continuous understanding — "what was I working on an hour ago?" |
+| Learned tolerance | Derive the interruption budget from how you respond to interruptions |
+| Nightly watch | Scheduled sweeps that report only what changed since yesterday |
+| Workflow recording | Watch you do a task once, replay it on demand with undo behind every step |
 
 ---
 
-## 🤝 Credits
+## 🙏 Credits
 
-**Built by Sacheet.**
+Built by **Sacheet** on the Mark LI–LIII foundation by [FatihMakes](https://github.com/FatihMakes) — the audio pipeline, judgement layer, senses, screen understanding, protection and Kali compatibility are additions to that base, and the LIV intelligence, safety and verification layers are new work on top of it.
 
-An independent assistant built on top of the original Mark-LIII engine by FatihMakes, whose foundation made this possible. The audio pipeline, judgement layer, senses, screen understanding, personal protection and Kali compatibility work are additions to that base.
+| Asset | Source | Licence |
+|---|---|---|
+| `core/face_model.obj` | [MediaPipe](https://github.com/google-ai-edge/mediapipe) canonical face model | Apache 2.0 |
 
-| Platform | Contact |
+---
+
+## 🔒 Your Data
+
+Everything stays on your machine. There is no server, no telemetry, no account.
+
+| What | Where | Notes |
+|---|---|---|
+| Gemini API key | `config/api_keys.json` | **Plaintext** — treat it like a password file |
+| What the assistant remembers | `memory/` | Delete the files and it forgets everything |
+| Audit trail | `memory/activity_log.jsonl` | Every autonomous action, with its reason |
+
+All are listed in `.gitignore`. **If you have ever committed `config/api_keys.json` publicly, revoke the key** — removing the file in a later commit does not remove it from the history.
+
+Your voice is streamed to Google's Gemini Live API while a session is open; that is the one thing that leaves your computer, and it stops when you mute or close the app.
+
+---
+
+## ⚠️ License
+
+Personal and non-commercial use only.
+Licensed under **[Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**.
+
+---
+
+## 👤 Connect
+
+Engineered by a developer building a real-world JARVIS-style assistant.
+⭐ **Star the repository to support the journey to Mark 100.**
+
+| Platform | Link |
 |---|---|
-| Instagram | [@jamie](https://www.instagram.com/cutiefemboynya) |
-| Discord | `alone_slave` |
+| GitHub | [@SacheetKumar124](https://github.com/SacheetKumar124) |
+| Instagram | @jamie |
+| Discord | alone_slave |
